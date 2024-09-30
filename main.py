@@ -22,8 +22,7 @@ class HexagonWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-
-        # Draw hexagon
+      
         center = self.rect().center()
         radius = min(self.width(), self.height()) // 2 - 10
         hexagon = QPolygon([
@@ -34,12 +33,10 @@ class HexagonWidget(QWidget):
         painter.setBrush(QColor(self.color))
         painter.drawPolygon(hexagon)
 
-        # Draw title in black
         painter.setPen(Qt.GlobalColor.black)
         painter.setFont(QFont('Arial', 12, QFont.Weight.Bold))
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter, self.title)
 
-        # Draw value in black
         painter.setFont(QFont('Arial', 16, QFont.Weight.Bold))
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, f"{self.value}")
 
@@ -55,16 +52,13 @@ class PlantMonitorUI(QMainWindow):
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
 
-        # Title
         title_label = QLabel("Automatic Plant Monitor")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setFont(QFont('Arial', 18, QFont.Weight.Bold))
         main_layout.addWidget(title_label)
 
-        # Controls
         controls_layout = QHBoxLayout()
 
-        # Watering interval slider
         self.interval_slider = QSlider(Qt.Orientation.Horizontal)
         self.interval_slider.setMinimum(1)
         self.interval_slider.setMaximum(72)
@@ -81,7 +75,6 @@ class PlantMonitorUI(QMainWindow):
 
         controls_layout.addLayout(interval_layout)
 
-        # Watering history
         self.history_text = QTextEdit()
         self.history_text.setReadOnly(True)
         self.history_text.setMaximumHeight(100)
@@ -90,15 +83,13 @@ class PlantMonitorUI(QMainWindow):
         history_layout.addWidget(self.history_text)
 
         controls_layout.addLayout(history_layout)
-
-        # Manual watering button
+      
         self.water_button = QPushButton("Water Now")
         self.water_button.clicked.connect(self.manual_water)
         controls_layout.addWidget(self.water_button)
 
         main_layout.addLayout(controls_layout)
 
-        # Hexagon widgets
         hex_layout = QHBoxLayout()
 
         self.humidity_hex = HexagonWidget("Humidity", "#3498db")
@@ -116,7 +107,6 @@ class PlantMonitorUI(QMainWindow):
         main_layout.addLayout(hex_layout)
         self.setCentralWidget(central_widget)
 
-        # Timer to update values (simulating sensor readings)
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateValues)
         self.timer.start(2000)  # Update every 2 seconds
@@ -139,14 +129,12 @@ class PlantMonitorUI(QMainWindow):
         self.history_text.setText(history_text)
 
     def updateValues(self):
-        # In a real application, you would get these values from sensors
         self.humidity_hex.setValue(f"{random.randint(30, 80)}%")
         self.temperature_hex.setValue(f"{random.randint(15, 35)}°C")
         self.moisture_hex.setValue(f"{random.randint(20, 90)}%")
         self.ph_hex.setValue(f"{random.uniform(5.5, 7.5):.1f}")
         self.light_hex.setValue(f"{random.randint(100, 1000)} lux")
 
-        # Check if it's time to water the plant
         if datetime.now() - self.last_watered > timedelta(hours=self.watering_interval):
             self.water_plant()
 
