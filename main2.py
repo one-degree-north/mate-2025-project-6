@@ -7,7 +7,6 @@ from PyQt6.QtGui import QPainter, QColor, QPolygon, QFont
 from PyQt6.QtCore import Qt, QPoint, QTimer
 from datetime import datetime, timedelta
 
-# Raspberry Pi specific imports
 import board
 import adafruit_dht
 import busio
@@ -15,21 +14,17 @@ import adafruit_ads1x15.ads1015 as ADS
 from adafruit_ads1x15.analog_in import AnalogIn
 import RPi.GPIO as GPIO
 
-# Set up GPIO
 GPIO.setmode(GPIO.BCM)
 
-# DHT22 sensor for temperature and humidity
 dht_sensor = adafruit_dht.DHT22(board.D4)
 
-# Soil moisture sensor (digital)
 MOISTURE_PIN = 17
 GPIO.setup(MOISTURE_PIN, GPIO.IN)
 
-# Set up ADS1015 ADC for light and pH sensors
 i2c = busio.I2C(board.SCL, board.SDA)
 ads = ADS.ADS1015(i2c)
-light_sensor = AnalogIn(ads, ADS.P0)  # Connect light sensor to A0
-ph_sensor = AnalogIn(ads, ADS.P1)     # Connect pH sensor to A1
+light_sensor = AnalogIn(ads, ADS.P0)
+ph_sensor = AnalogIn(ads, ADS.P1)
 
 def read_sensors():
     try:
@@ -37,7 +32,7 @@ def read_sensors():
         humidity = dht_sensor.humidity
         moisture = GPIO.input(MOISTURE_PIN)
         light = light_sensor.value
-        ph = ph_sensor.voltage * 3.5  # Assuming pH sensor gives 0-14 pH over 0-5V
+        ph = ph_sensor.voltage * 3.5
 
         return {
             "temperature": temperature,
@@ -66,7 +61,6 @@ class HexagonWidget(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        # Draw hexagon
         center = self.rect().center()
         radius = min(self.width(), self.height()) // 2 - 10
         hexagon = QPolygon([
@@ -77,12 +71,10 @@ class HexagonWidget(QWidget):
         painter.setBrush(QColor(self.color))
         painter.drawPolygon(hexagon)
 
-        # Draw title in black
         painter.setPen(Qt.GlobalColor.black)
         painter.setFont(QFont('Arial', 12, QFont.Weight.Bold))
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignHCenter, self.title)
 
-        # Draw value in black
         painter.setFont(QFont('Arial', 16, QFont.Weight.Bold))
         painter.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, f"{self.value}")
 
@@ -91,29 +83,25 @@ class PlantMonitorUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("Plant Monitor")
         self.setGeometry(100, 100, 800, 600)
-        self.last_watered = datetime.now() - timedelta(hours=24)  # Initialize to 24 hours ago
+        self.last_watered = datetime.now() - timedelta(hours=24)
         self.watering_history = []
 
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
 
-        # Title
         title_label = QLabel("Automatic Plant Monitor with AI")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setFont(QFont('Arial', 18, QFont.Weight.Bold))
         main_layout.addWidget(title_label)
 
-        # Plant AI Talking Section
         self.plant_ai_text = QTextEdit()
         self.plant_ai_text.setReadOnly(True)
         self.plant_ai_text.setMaximumHeight(100)
         main_layout.addWidget(QLabel("Plant AI Says:"))
         main_layout.addWidget(self.plant_ai_text)
 
-        # Controls
         controls_layout = QHBoxLayout()
 
-        # Watering history
         self.history_text = QTextEdit()
         self.history_text.setReadOnly(True)
         self.history_text.setMaximumHeight(100)
@@ -123,14 +111,12 @@ class PlantMonitorUI(QMainWindow):
 
         controls_layout.addLayout(history_layout)
 
-        # Manual watering button
         self.water_button = QPushButton("Water Now")
         self.water_button.clicked.connect(self.manual_water)
         controls_layout.addWidget(self.water_button)
 
         main_layout.addLayout(controls_layout)
 
-        # Hexagon widgets
         hex_layout = QHBoxLayout()
 
         self.humidity_hex = HexagonWidget("Humidity", "#3498db")
@@ -148,10 +134,9 @@ class PlantMonitorUI(QMainWindow):
         main_layout.addLayout(hex_layout)
         self.setCentralWidget(central_widget)
 
-        # Timer to update values
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateValues)
-        self.timer.start(2000)  # Update every 2 seconds
+        self.timer.start(2000)
 
     def generate_plant_message(self, sensor_data):
         messages = []
@@ -193,10 +178,9 @@ class PlantMonitorUI(QMainWindow):
         self.last_watered = current_time
         self.watering_history.append(current_time.strftime("%Y-%m-%d %H:%M:%S"))
         self.update_history_text()
-        # Here you would add code to activate a water pump or valve
 
     def update_history_text(self):
-        history_text = "\n".join(self.watering_history[-5:])  # Show last 5 watering times
+        history_text = "\n".join(self.watering_history[-5:])
         self.history_text.setText(history_text)
 
     def updateValues(self):
@@ -208,11 +192,9 @@ class PlantMonitorUI(QMainWindow):
             self.ph_hex.setValue(f"{sensor_data['ph']:.1f}")
             self.light_hex.setValue(f"{sensor_data['light']} lux")
 
-            # Generate and display plant AI message
             plant_message = self.generate_plant_message(sensor_data)
             self.plant_ai_text.setText(plant_message)
 
-            # Check if it's time to water the plant (every 24 hours in this example)
             if datetime.now() - self.last_watered > timedelta(hours=24):
                 self.water_plant()
         else:
