@@ -1,10 +1,10 @@
 import sys
 import math
+import random
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QSlider, QTextEdit, QPushButton)
+                             QTextEdit, QPushButton)
 from PyQt6.QtGui import QPainter, QColor, QPolygon, QFont
 from PyQt6.QtCore import Qt, QPoint, QTimer
-import random
 from datetime import datetime, timedelta
 
 class HexagonWidget(QWidget):
@@ -22,7 +22,7 @@ class HexagonWidget(QWidget):
     def paintEvent(self, event):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
-      
+
         center = self.rect().center()
         radius = min(self.width(), self.height()) // 2 - 10
         hexagon = QPolygon([
@@ -45,7 +45,6 @@ class PlantMonitorUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("Plant Monitor")
         self.setGeometry(100, 100, 800, 600)
-        self.watering_interval = 24  # Default watering interval in hours
         self.last_watered = datetime.now() - timedelta(hours=24)  # Initialize to 24 hours ago
         self.watering_history = []
 
@@ -57,23 +56,13 @@ class PlantMonitorUI(QMainWindow):
         title_label.setFont(QFont('Arial', 18, QFont.Weight.Bold))
         main_layout.addWidget(title_label)
 
+        self.plant_ai_text = QTextEdit()
+        self.plant_ai_text.setReadOnly(True)
+        self.plant_ai_text.setMaximumHeight(100)
+        main_layout.addWidget(QLabel("Plant Says:"))
+        main_layout.addWidget(self.plant_ai_text)
+
         controls_layout = QHBoxLayout()
-
-        self.interval_slider = QSlider(Qt.Orientation.Horizontal)
-        self.interval_slider.setMinimum(1)
-        self.interval_slider.setMaximum(72)
-        self.interval_slider.setValue(self.watering_interval)
-        self.interval_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.interval_slider.setTickInterval(12)
-        self.interval_slider.valueChanged.connect(self.update_watering_interval)
-
-        interval_layout = QVBoxLayout()
-        interval_layout.addWidget(QLabel("Watering Interval (hours):"))
-        interval_layout.addWidget(self.interval_slider)
-        self.interval_label = QLabel(f"{self.watering_interval} hours")
-        interval_layout.addWidget(self.interval_label)
-
-        controls_layout.addLayout(interval_layout)
 
         self.history_text = QTextEdit()
         self.history_text.setReadOnly(True)
@@ -83,7 +72,7 @@ class PlantMonitorUI(QMainWindow):
         history_layout.addWidget(self.history_text)
 
         controls_layout.addLayout(history_layout)
-      
+
         self.water_button = QPushButton("Water Now")
         self.water_button.clicked.connect(self.manual_water)
         controls_layout.addWidget(self.water_button)
@@ -109,11 +98,34 @@ class PlantMonitorUI(QMainWindow):
 
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateValues)
-        self.timer.start(2000)  # Update every 2 seconds
+        self.timer.start(2000) 
 
-    def update_watering_interval(self, value):
-        self.watering_interval = value
-        self.interval_label.setText(f"{value} hours")
+    def generate_plant_message(self, sensor_data):
+        messages = []
+        if sensor_data['temperature'] > 30:
+            messages.append("Whew, it's getting hot in here!")
+        elif sensor_data['temperature'] < 20:
+            messages.append("Brr, I'm feeling a bit chilly.")
+        
+        if sensor_data['humidity'] < 40:
+            messages.append("I'm feeling a bit dry. Could use some mist!")
+        elif sensor_data['humidity'] > 70:
+            messages.append("It's quite humid today. I feel like I'm in a rainforest!")
+        
+        if sensor_data['moisture'] < 30:
+            messages.append("I'm thirsty! Could you water me, please?")
+        elif sensor_data['moisture'] > 80:
+            messages.append("Whoa, easy on the water there! I'm not a fish.")
+        
+        if sensor_data['light'] < 300:
+            messages.append("It's a bit dark here. I could use some more light to grow.")
+        elif sensor_data['light'] > 800:
+            messages.append("Wow, it's bright! I feel like I'm on a beach vacation.")
+        
+        if not messages:
+            messages.append("Everything's just perfect! I'm one happy plant!")
+        
+        return random.choice(messages)
 
     def manual_water(self):
         self.water_plant()
@@ -125,17 +137,28 @@ class PlantMonitorUI(QMainWindow):
         self.update_history_text()
 
     def update_history_text(self):
-        history_text = "\n".join(self.watering_history[-5:])  # Show last 5 watering times
+        history_text = "\n".join(self.watering_history[-5:])  
         self.history_text.setText(history_text)
 
     def updateValues(self):
-        self.humidity_hex.setValue(f"{random.randint(30, 80)}%")
-        self.temperature_hex.setValue(f"{random.randint(15, 35)}°C")
-        self.moisture_hex.setValue(f"{random.randint(20, 90)}%")
-        self.ph_hex.setValue(f"{random.uniform(5.5, 7.5):.1f}")
-        self.light_hex.setValue(f"{random.randint(100, 1000)} lux")
+        sensor_data = {
+            'humidity': random.randint(30, 80),
+            'temperature': random.randint(20, 25),
+            'moisture': random.randint(50, 70),
+            'ph': round(random.uniform(5.5, 7.5), 1),
+            'light': random.randint(100, 1000)
+        }
 
-        if datetime.now() - self.last_watered > timedelta(hours=self.watering_interval):
+        self.humidity_hex.setValue(f"{sensor_data['humidity']}%")
+        self.temperature_hex.setValue(f"{sensor_data['temperature']}°C")
+        self.moisture_hex.setValue(f"{sensor_data['moisture']}%")
+        self.ph_hex.setValue(f"{sensor_data['ph']}")
+        self.light_hex.setValue(f"{sensor_data['light']} lux")
+
+        plant_message = self.generate_plant_message(sensor_data)
+        self.plant_ai_text.setText(plant_message)
+
+        if datetime.now() - self.last_watered > timedelta(hours=24):
             self.water_plant()
 
 if __name__ == "__main__":
