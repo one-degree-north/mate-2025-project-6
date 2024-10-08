@@ -1,7 +1,8 @@
 import sys
 import math
+import random
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
-                             QSlider, QTextEdit, QPushButton)
+                             QTextEdit, QPushButton)
 from PyQt6.QtGui import QPainter, QColor, QPolygon, QFont
 from PyQt6.QtCore import Qt, QPoint, QTimer
 from datetime import datetime, timedelta
@@ -34,14 +35,14 @@ def read_sensors():
     try:
         temperature = dht_sensor.temperature
         humidity = dht_sensor.humidity
-        moisture = "Wet" if GPIO.input(MOISTURE_PIN) == GPIO.LOW else "Dry"
+        moisture = GPIO.input(MOISTURE_PIN)
         light = light_sensor.value
         ph = ph_sensor.voltage * 3.5  # Assuming pH sensor gives 0-14 pH over 0-5V
 
         return {
             "temperature": temperature,
             "humidity": humidity,
-            "moisture": moisture,
+            "moisture": "Wet" if moisture == GPIO.LOW else "Dry",
             "light": light,
             "ph": ph
         }
@@ -90,38 +91,27 @@ class PlantMonitorUI(QMainWindow):
         super().__init__()
         self.setWindowTitle("Plant Monitor")
         self.setGeometry(100, 100, 800, 600)
-        self.watering_interval = 24
-        self.last_watered = datetime.now() - timedelta(hours=24)
+        self.last_watered = datetime.now() - timedelta(hours=24)  # Initialize to 24 hours ago
         self.watering_history = []
 
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
 
         # Title
-        title_label = QLabel("Automatic Plant Monitor")
+        title_label = QLabel("Automatic Plant Monitor with AI")
         title_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         title_label.setFont(QFont('Arial', 18, QFont.Weight.Bold))
         main_layout.addWidget(title_label)
 
+        # Plant AI Talking Section
+        self.plant_ai_text = QTextEdit()
+        self.plant_ai_text.setReadOnly(True)
+        self.plant_ai_text.setMaximumHeight(100)
+        main_layout.addWidget(QLabel("Plant AI Says:"))
+        main_layout.addWidget(self.plant_ai_text)
+
         # Controls
         controls_layout = QHBoxLayout()
-
-        # Watering interval slider
-        self.interval_slider = QSlider(Qt.Orientation.Horizontal)
-        self.interval_slider.setMinimum(1)
-        self.interval_slider.setMaximum(72)
-        self.interval_slider.setValue(self.watering_interval)
-        self.interval_slider.setTickPosition(QSlider.TickPosition.TicksBelow)
-        self.interval_slider.setTickInterval(12)
-        self.interval_slider.valueChanged.connect(self.update_watering_interval)
-
-        interval_layout = QVBoxLayout()
-        interval_layout.addWidget(QLabel("Watering Interval (hours):"))
-        interval_layout.addWidget(self.interval_slider)
-        self.interval_label = QLabel(f"{self.watering_interval} hours")
-        interval_layout.addWidget(self.interval_label)
-
-        controls_layout.addLayout(interval_layout)
 
         # Watering history
         self.history_text = QTextEdit()
@@ -161,11 +151,39 @@ class PlantMonitorUI(QMainWindow):
         # Timer to update values
         self.timer = QTimer(self)
         self.timer.timeout.connect(self.updateValues)
-        self.timer.start(5000)  # Update every 5 seconds
+        self.timer.start(2000)  # Update every 2 seconds
 
-    def update_watering_interval(self, value):
-        self.watering_interval = value
-        self.interval_label.setText(f"{value} hours")
+    def generate_plant_message(self, sensor_data):
+        messages = []
+        if sensor_data['temperature'] > 30:
+            messages.append("Whew, it's getting hot in here!")
+        elif sensor_data['temperature'] < 20:
+            messages.append("Brr, I'm feeling a bit chilly.")
+        
+        if sensor_data['humidity'] < 40:
+            messages.append("I'm feeling a bit dry. Could use some mist!")
+        elif sensor_data['humidity'] > 70:
+            messages.append("It's quite humid today. I feel like I'm in a rainforest!")
+        
+        if sensor_data['moisture'] == "Dry":
+            messages.append("I'm thirsty! Could you water me, please?")
+        elif sensor_data['moisture'] == "Wet":
+            messages.append("Ahh, that's better. Thanks for the drink!")
+        
+        if sensor_data['light'] < 300:
+            messages.append("It's a bit dark here. I could use some more light to grow.")
+        elif sensor_data['light'] > 800:
+            messages.append("Wow, it's bright! I feel like I'm on a beach vacation.")
+        
+        if sensor_data['ph'] < 6.0:
+            messages.append("The soil's a bit acidic. Maybe some lime would help?")
+        elif sensor_data['ph'] > 7.0:
+            messages.append("The soil's a bit alkaline. Perhaps some sulfur would balance things out?")
+        
+        if not messages:
+            messages.append("Everything's just perfect! I'm one happy plant!")
+        
+        return random.choice(messages)
 
     def manual_water(self):
         self.water_plant()
@@ -189,12 +207,16 @@ class PlantMonitorUI(QMainWindow):
             self.moisture_hex.setValue(sensor_data['moisture'])
             self.ph_hex.setValue(f"{sensor_data['ph']:.1f}")
             self.light_hex.setValue(f"{sensor_data['light']} lux")
+
+            # Generate and display plant AI message
+            plant_message = self.generate_plant_message(sensor_data)
+            self.plant_ai_text.setText(plant_message)
+
+            # Check if it's time to water the plant (every 24 hours in this example)
+            if datetime.now() - self.last_watered > timedelta(hours=24):
+                self.water_plant()
         else:
             print("Failed to read sensor data")
-
-        # Check if it's time to water the plant
-        if datetime.now() - self.last_watered > timedelta(hours=self.watering_interval):
-            self.water_plant()
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
