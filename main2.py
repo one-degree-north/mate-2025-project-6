@@ -1,49 +1,95 @@
+# Server (sensor_server.py)
+import socket
+import json
+import random
+import time
+
+USE_RASPBERRY_PI = False  # Set this to True when running on Raspberry Pi
+
+if USE_RASPBERRY_PI:
+    import board
+    import adafruit_dht
+    import busio
+    import adafruit_ads1x15.ads1015 as ADS
+    from adafruit_ads1x15.analog_in import AnalogIn
+    import RPi.GPIO as GPIO
+
+    GPIO.setmode(GPIO.BCM)
+    dht_sensor = adafruit_dht.DHT22(board.D4)
+    MOISTURE_PIN = 17
+    GPIO.setup(MOISTURE_PIN, GPIO.IN)
+    i2c = busio.I2C(board.SCL, board.SDA)
+    ads = ADS.ADS1015(i2c)
+    light_sensor = AnalogIn(ads, ADS.P0)
+    ph_sensor = AnalogIn(ads, ADS.P1)
+    moisture_sensor = AnalogIn(ads, ADS.P2)
+
+def read_sensors():
+    if USE_RASPBERRY_PI:
+        try:
+            temperature = dht_sensor.temperature
+            humidity = dht_sensor.humidity
+            moisture = moisture_sensor.value
+            light = light_sensor.value
+            ph = ph_sensor.voltage * 3.5
+
+            moisture_percentage = (moisture - 1000) / (65535 - 1000) * 100
+            moisture_percentage = max(0, min(100, moisture_percentage))
+
+            return {
+                "temperature": temperature,
+                "humidity": humidity,
+                "moisture": moisture_percentage,
+                "light": light,
+                "ph": ph
+            }
+        except Exception as e:
+            print(f"Error reading sensor: {e}")
+            return None
+    else:
+        return {
+            "temperature": random.uniform(15, 35),
+            "humidity": random.uniform(30, 80),
+            "moisture": random.uniform(0, 100),
+            "light": random.uniform(100, 1000),
+            "ph": random.uniform(5.5, 7.5)
+        }
+
+def start_server():
+    host = '127.0.0.1'  # localhost
+    port = 65432
+
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind((host, port))
+        s.listen()
+        print(f"Server listening on {host}:{port}")
+        
+        while True:
+            conn, addr = s.accept()
+            with conn:
+                print(f"Connected by {addr}")
+                while True:
+                    data = conn.recv(1024)
+                    if not data:
+                        break
+                    if data.decode() == "GET_DATA":
+                        sensor_data = read_sensors()
+                        conn.sendall(json.dumps(sensor_data).encode())
+                    time.sleep(0.1)
+
+if __name__ == "__main__":
+    start_server()
+
+# Client (plant_monitor_client.py)
 import sys
 import math
-import random
+import json
+import socket
 from PyQt6.QtWidgets import (QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                              QTextEdit, QPushButton)
 from PyQt6.QtGui import QPainter, QColor, QPolygon, QFont
 from PyQt6.QtCore import Qt, QPoint, QTimer
 from datetime import datetime, timedelta
-
-import board
-import adafruit_dht
-import busio
-import adafruit_ads1x15.ads1015 as ADS
-from adafruit_ads1x15.analog_in import AnalogIn
-import RPi.GPIO as GPIO
-
-GPIO.setmode(GPIO.BCM)
-
-dht_sensor = adafruit_dht.DHT22(board.D4)
-
-MOISTURE_PIN = 17
-GPIO.setup(MOISTURE_PIN, GPIO.IN)
-
-i2c = busio.I2C(board.SCL, board.SDA)
-ads = ADS.ADS1015(i2c)
-light_sensor = AnalogIn(ads, ADS.P0)
-ph_sensor = AnalogIn(ads, ADS.P1)
-
-def read_sensors():
-    try:
-        temperature = dht_sensor.temperature
-        humidity = dht_sensor.humidity
-        moisture = GPIO.input(MOISTURE_PIN)
-        light = light_sensor.value
-        ph = ph_sensor.voltage * 3.5
-
-        return {
-            "temperature": temperature,
-            "humidity": humidity,
-            "moisture": "Wet" if moisture == GPIO.LOW else "Dry",
-            "light": light,
-            "ph": ph
-        }
-    except RuntimeError as e:
-        print(f"Error reading sensor: {e}")
-        return None
 
 class HexagonWidget(QWidget):
     def __init__(self, title, color):
@@ -85,6 +131,8 @@ class PlantMonitorUI(QMainWindow):
         self.setGeometry(100, 100, 800, 600)
         self.last_watered = datetime.now() - timedelta(hours=24)
         self.watering_history = []
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        self.socket.connect(('127.0.0.1', 65432))
 
         central_widget = QWidget()
         main_layout = QVBoxLayout(central_widget)
@@ -150,10 +198,10 @@ class PlantMonitorUI(QMainWindow):
         elif sensor_data['humidity'] > 70:
             messages.append("It's quite humid today. I feel like I'm in a rainforest!")
         
-        if sensor_data['moisture'] == "Dry":
+        if sensor_data['moisture'] < 30:
             messages.append("I'm thirsty! Could you water me, please?")
-        elif sensor_data['moisture'] == "Wet":
-            messages.append("Ahh, that's better. Thanks for the drink!")
+        elif sensor_data['moisture'] > 80:
+            messages.append("Whoa, easy on the water there! I'm not a fish.")
         
         if sensor_data['light'] < 300:
             messages.append("It's a bit dark here. I could use some more light to grow.")
@@ -184,21 +232,28 @@ class PlantMonitorUI(QMainWindow):
         self.history_text.setText(history_text)
 
     def updateValues(self):
-        sensor_data = read_sensors()
-        if sensor_data:
+        try:
+            self.socket.sendall("GET_DATA".encode())
+            data = self.socket.recv(1024)
+            sensor_data = json.loads(data.decode())
+            
             self.humidity_hex.setValue(f"{sensor_data['humidity']:.1f}%")
             self.temperature_hex.setValue(f"{sensor_data['temperature']:.1f}°C")
-            self.moisture_hex.setValue(sensor_data['moisture'])
+            self.moisture_hex.setValue(f"{sensor_data['moisture']:.1f}%")
             self.ph_hex.setValue(f"{sensor_data['ph']:.1f}")
-            self.light_hex.setValue(f"{sensor_data['light']} lux")
+            self.light_hex.setValue(f"{sensor_data['light']:.0f} lux")
 
             plant_message = self.generate_plant_message(sensor_data)
             self.plant_ai_text.setText(plant_message)
 
             if datetime.now() - self.last_watered > timedelta(hours=24):
                 self.water_plant()
-        else:
-            print("Failed to read sensor data")
+        except Exception as e:
+            print(f"Error updating values: {e}")
+
+    def closeEvent(self, event):
+        self.socket.close()
+        super().closeEvent(event)
 
 if __name__ == "__main__":
     app = QApplication(sys.argv)
